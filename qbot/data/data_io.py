@@ -153,6 +153,30 @@ class Symbol:
                 f"Symbol {self.raw_symbol} not supported for exchange {self.exchange}"
             )
 
+    def _fill_missing_timestamp(self, df: pd.DataFrame) -> pd.DataFrame:
+        pd_timedelta = pd.Timedelta(self.interval)
+        index = 0
+        missing_timestamps = []
+        while index < len(df) - 1:
+            timestamp = df["timestamp"].iloc[index] + pd_timedelta
+            while timestamp < df["timestamp"].iloc[index + 1]:
+                # insert missing timestamp null row
+                missing_timestamps.append(timestamp)
+                timestamp += pd_timedelta
+            index += 1
+        df = pd.concat(
+            [df, pd.DataFrame(missing_timestamps, columns=["timestamp"])],
+            ignore_index=True,
+        )
+        df.sort_values(by="timestamp", inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        if missing_timestamps:
+            print(
+                f"Warning: {len(missing_timestamps)} missing timestamps found and filled with NA"
+            )
+            print(missing_timestamps)
+        return df
+
     def _check_timestamp(
         self, df: pd.DataFrame, time_range: Union[TimeRange, None] = None
     ) -> None:
@@ -192,6 +216,10 @@ class Symbol:
             pd_timedelta = pd.Timedelta(self.interval)
             diff_series = df["timestamp"].diff()[1:]
             if not (diff_series == pd_timedelta).all():
+                # print row with diff_series != pd_timedelta
+                for i in range(1, len(df)):
+                    if df["timestamp"].diff()[i] != pd_timedelta:
+                        print(df.iloc[max(0, i - 10) : min(len(df), i + 10)])
                 raise ValueError(
                     f"Timestamp delta is not {pd_timedelta}: {diff_series.value_counts()}"
                 )
@@ -262,10 +290,10 @@ class Symbol:
 
         # Convert timestamp
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        # new_df.set_index('timestamp', inplace=True)
+        df = self._fill_missing_timestamp(df)
         self._check_timestamp(df, time_range)
 
-        # Convert to float
+        # Convert to float, keeping NA values
         float_cols = [
             "open",
             "high",
@@ -276,11 +304,13 @@ class Symbol:
             "taker_buy_base_asset_volume",
             "taker_buy_quote_asset_volume",
         ]
-        df[float_cols] = df[float_cols].astype(float)
+        df[float_cols] = df[float_cols].apply(pd.to_numeric, errors="coerce")
 
-        # Convert to int
+        # Convert to int, keeping NA values
         int_cols = ["close_time", "number_of_trades", "ignore"]
-        df[int_cols] = df[int_cols].astype(int)
+        df[int_cols] = (
+            df[int_cols].apply(pd.to_numeric, errors="coerce").astype("Int64")
+        )
 
         return df
 
