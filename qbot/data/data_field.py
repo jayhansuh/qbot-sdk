@@ -1,6 +1,6 @@
 import fnmatch
 from datetime import datetime, timedelta
-from typing import Union
+from typing import List, Tuple, Union
 
 import pandas as pd
 from binance.client import Client
@@ -11,14 +11,14 @@ from qbot.data.data_io import Symbol
 class DataField:
     def __init__(
         self,
-        binance_client: Client = Client(),
+        binance_client: Client = None,
         interval: str = "1h",
         start_time: datetime = None,
         end_time: datetime = datetime.now(),
-        ticker_list: list[str] = [],
+        ticker_list: List[str] = [],
         min_update_interval: timedelta = None,
     ):
-        self.binance_client = binance_client
+        self.binance_client = binance_client or Client()
         self.interval = interval
         self.end_time = end_time
         self.start_time = start_time or (end_time - timedelta(hours=300))
@@ -28,7 +28,7 @@ class DataField:
         self.symbol_list = []
         self.add_ticker(ticker_list)
 
-    def add_ticker(self, ticker: Union[str, list[str]]) -> None:
+    def add_ticker(self, ticker: Union[str, List[str]]) -> None:
         if isinstance(ticker, str):
             new_symbol = Symbol.parse_str(ticker)
             self.df_dict[str(new_symbol)] = new_symbol.load_data(
@@ -44,8 +44,8 @@ class DataField:
             raise ValueError(f"Invalid ticker: {ticker}")
 
     def __getitem__(
-        self, key: Union[Symbol, str, list[any], int]
-    ) -> Union[tuple[str, pd.DataFrame], list[tuple[str, pd.DataFrame]]]:
+        self, key: Union[Symbol, str, List[any], int]
+    ) -> Union[Tuple[str, pd.DataFrame], List[Tuple[str, pd.DataFrame]]]:
 
         if isinstance(key, str):
 

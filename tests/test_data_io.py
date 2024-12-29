@@ -5,6 +5,8 @@ import pytest
 
 from qbot.data.data_io import EXCHANGE_METADATA, Symbol, TimeRange
 
+from .conftest import check_binance_availability
+
 
 def test_symbol_initialization():
     symbol = Symbol(
@@ -32,6 +34,10 @@ def test_time_range():
     assert str(tr) == "2024-01-01_2024-03-01"
 
 
+@pytest.mark.skipif(
+    check_binance_availability(),
+    reason="Binance API not available or restricted",
+)
 def test_exchange_metadata_validation():
     symbol = Symbol(
         exchange="BINANCE", interval="1h", market="SPOT", raw_symbol="BTCUSDT"

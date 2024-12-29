@@ -5,6 +5,8 @@ import pytest
 from qbot.data.data_field import DataField
 from qbot.strategy.strategy import Strategy
 
+from .conftest import check_binance_availability
+
 
 def test_strategy_initialization():
     strategy = Strategy(
@@ -15,6 +17,10 @@ def test_strategy_initialization():
     assert strategy.interval == "1h"
 
 
+@pytest.mark.skipif(
+    check_binance_availability(),
+    reason="Binance API not available or restricted",
+)
 def test_strategy_evaluation():
     strategy = Strategy(name="test_strategy")
 
@@ -37,6 +43,10 @@ def test_strategy_evaluation():
     assert "timestamp" in strategy._compute_df.columns
 
 
+@pytest.mark.skipif(
+    check_binance_availability(),
+    reason="Binance API not available or restricted",
+)
 def test_strategy_backtest():
     strategy = Strategy(name="test_strategy")
 

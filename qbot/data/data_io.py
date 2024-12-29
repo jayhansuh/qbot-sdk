@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from glob import glob
-from typing import Any, Optional, Union
+from typing import Any, Optional, Tuple, Union
 
 import pandas as pd  # type: ignore
 
@@ -70,12 +70,12 @@ class TimeRange:
     def __str__(self) -> str:
         return f'{self.start_date.strftime("%Y-%m-%d")}_{self.end_date.strftime("%Y-%m-%d")}'
 
-    def to_milliseconds(self) -> tuple[int, int]:
+    def to_milliseconds(self) -> Tuple[int, int]:
         start_timestamp_ms = int(self.start_date.timestamp() * 1000)
         end_timestamp_ms = int((self.end_date or datetime.now()).timestamp() * 1000)
         return start_timestamp_ms, end_timestamp_ms
 
-    def to_UTC_str(self) -> tuple[str, str]:
+    def to_UTC_str(self) -> Tuple[str, str]:
         start_utc_str = self.start_date.strftime("%Y-%m-%d")
         end_utc_str = self.end_date.strftime("%Y-%m-%d")
         return start_utc_str, end_utc_str

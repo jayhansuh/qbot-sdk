@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -95,7 +95,7 @@ def pairplot_scan(
 
 def calculate_alpha_beta_gamma(
     y: pd.Series, x: pd.Series
-) -> tuple[float, float, float]:
+) -> Tuple[float, float, float]:
     # return_y =
     #   alpha + beta * return_x
     #   + gamma * return_x + noise
