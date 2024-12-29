@@ -89,9 +89,12 @@ class Strategy(ABC):
             - 1
         ).min()
         print(f"Max Drawdown: {mdd * 100:.2f}%")
-        # alpha, beta, gamma = calculate_alpha_beta_gamma(self._asset_df['ln_asset_value'], self._asset_df['ln_reference_index'])
-        alpha, beta, gamma = None, None, None
-        print(f"alpha: {alpha}, beta: {beta}, gamma: {gamma}")
+        
+        alpha, beta, gamma = calculate_alpha_beta_gamma(self._asset_df['asset_value'], np.exp(self._asset_df['ln_reference_index']))
+        if self.interval == '1h':
+            annual_alpha = (1+alpha)**(24*365)-1
+
+        print(f"annual alpha: {annual_alpha * 100:.2f}%, beta: {beta:.2f}, gamma: {gamma:.2f}")
         reference_return = np.exp(self._asset_df["ln_reference_index"].iloc[-1]) - 1
         print(f"Reference {self.reference_index} Return: {reference_return:.2f}%")
         print(

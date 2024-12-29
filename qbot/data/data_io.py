@@ -244,17 +244,18 @@ class Symbol:
             client = Client()
 
         # Fetch new data based on market type
-        binance_client_get_hist_func = None
-        if self.market == "SPOT":
-            binance_client_get_hist_func = client.get_historical_klines
-        elif self.market == "USDT-M":
-            binance_client_get_hist_func = client.futures_historical_klines
-        elif self.market == "COIN-M":
-            binance_client_get_hist_func = client.futures_coin_historical_klines
-        else:
-            raise ValueError(f"Invalid market: {symbol.market}")
-
         from binance.enums import HistoricalKlinesType
+
+        binance_client_get_hist_func = client.get_historical_klines
+        if self.market == "SPOT":
+            klines_type = HistoricalKlinesType.SPOT
+        elif self.market == "USDT-M":
+            klines_type = HistoricalKlinesType.FUTURES
+        elif self.market == "COIN-M":
+            klines_type = HistoricalKlinesType.FUTURES_COIN
+        else:
+            raise ValueError(f"Invalid market: {symbol.market}") 
+
 
         start_ts, end_ts = time_range.to_milliseconds()
         klines = binance_client_get_hist_func(
@@ -262,12 +263,7 @@ class Symbol:
             interval=self.interval.lower(),
             start_str=start_ts,
             end_str=end_ts,
-            # limit=1000,
-            klines_type=(
-                HistoricalKlinesType.SPOT
-                if self.market == "SPOT"
-                else HistoricalKlinesType.FUTURES
-            ),
+            klines_type=klines_type,
         )
         # Convert new data to DataFrame
         df = pd.DataFrame(
