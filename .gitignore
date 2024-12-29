@@ -171,4 +171,4 @@ cython_debug/
 .pypirc
 
 # parquet files
-*.parquet
+.parquet

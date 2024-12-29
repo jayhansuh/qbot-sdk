@@ -5,7 +5,13 @@ import pytest
 
 from qbot.data.data_field import DataField
 
+from .conftest import check_binance_availability
 
+
+@pytest.mark.skipif(
+    check_binance_availability(),
+    reason="Binance API not available or restricted",
+)
 def test_data_field_initialization():
     df = DataField(
         interval="1h",
@@ -18,6 +24,10 @@ def test_data_field_initialization():
     assert "close" in df["BTCUSDT"].columns
 
 
+@pytest.mark.skipif(
+    check_binance_availability(),
+    reason="Binance API not available or restricted",
+)
 def test_data_field_wildcard():
     df = DataField(
         interval="1h",
@@ -30,6 +40,10 @@ def test_data_field_wildcard():
     assert all(isinstance(d, pd.DataFrame) for d in result)
 
 
+@pytest.mark.skipif(
+    check_binance_availability(),
+    reason="Binance API not available or restricted",
+)
 def test_data_field_add_ticker():
     df = DataField(interval="1h", start_time="2024-01-01", end_time="2024-01-02")
     df.add_ticker("BTCUSDT")
