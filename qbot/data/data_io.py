@@ -171,8 +171,11 @@ class Symbol:
         df.sort_values(by="timestamp", inplace=True)
         df.reset_index(drop=True, inplace=True)
         if missing_timestamps:
-            print(f"Warning: {len(missing_timestamps)} missing timestamps found")
-        return df, missing_timestamps
+            print(
+                f"Warning: {len(missing_timestamps)} missing timestamps found and filled with NA"
+            )
+            print(missing_timestamps)
+        return df
 
     def _check_timestamp(
         self, df: pd.DataFrame, time_range: Union[TimeRange, None] = None
@@ -287,9 +290,7 @@ class Symbol:
 
         # Convert timestamp
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df, missing_timestamps = self._fill_missing_timestamp(df)
-        if missing_timestamps:
-            print(f"Missing timestamps: {missing_timestamps}")
+        df = self._fill_missing_timestamp(df)
         self._check_timestamp(df, time_range)
 
         # Convert to float, keeping NA values
