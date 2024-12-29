@@ -9,7 +9,7 @@ You may use venv or conda to install the dependencies.
 Then install the dependencies
 
 ```bash
-pip install git+https://github.com/jayhansuh/qbot-sdk.git
+pip install -e git+https://github.com/jayhansuh/qbot-sdk.git#egg=qbot
 ```
 
 or
