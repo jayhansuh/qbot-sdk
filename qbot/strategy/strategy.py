@@ -32,6 +32,14 @@ class Strategy(ABC):
 
     def __getitem__(self, *args, **kwargs):
         return self._compute_df.__getitem__(*args, **kwargs)
+    
+    @property
+    def loc(self):
+        return self._compute_df.loc
+    
+    @property
+    def iloc(self):
+        return self._compute_df.iloc
 
     def evaluate(self, data_field: DataField):
         self.evaluate_func(self, data_field)
@@ -70,7 +78,7 @@ class Strategy(ABC):
         self._asset_df["return"] = 0.0
         for wcol, ccol in zip(weight_cols, close_cols):
             self._asset_df[wcol] = self._compute_df[wcol].shift(1).fillna(0.0)
-            self._asset_df[ccol] = self._compute_df[ccol].pct_change().fillna(0.0)
+            self._asset_df[ccol] = self._compute_df[ccol].ffill().pct_change().fillna(0.0)
             self._asset_df["return"] += self._asset_df[wcol] * self._asset_df[ccol]
         self._asset_df["asset_value"] = (1.0 + self._asset_df["return"]).cumprod()
         self._asset_df["ln_asset_value"] = np.log(self._asset_df["asset_value"])
