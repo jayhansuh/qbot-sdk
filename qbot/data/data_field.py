@@ -30,7 +30,7 @@ class DataField:
 
     def add_ticker(self, ticker: Union[str, List[str]]) -> None:
         if isinstance(ticker, str):
-            new_symbol = Symbol.parse_str(ticker)
+            new_symbol = Symbol.parse_str(ticker, interval=self.interval)
             self.df_dict[str(new_symbol)] = new_symbol.load_data(
                 start_datetime=self.start_time,
                 end_datetime=self.end_time,
@@ -52,7 +52,7 @@ class DataField:
             if key in self.df_dict:
                 return self.df_dict[key]
 
-            key = str(Symbol.parse_str(key))
+            key = str(Symbol.parse_str(key, interval=self.interval))
             if "*" in key or "?" in key or "[" in key or "{" in key:
                 fnmatch_list = [
                     k for k in self.df_dict.keys() if fnmatch.fnmatch(k, key)
