@@ -33,6 +33,14 @@ class Strategy(ABC):
     def __getitem__(self, *args, **kwargs):
         return self._compute_df.__getitem__(*args, **kwargs)
 
+    @property
+    def loc(self):
+        return self._compute_df.loc
+
+    @property
+    def iloc(self):
+        return self._compute_df.iloc
+
     def evaluate(self, data_field: DataField):
         self.evaluate_func(self, data_field)
 
@@ -70,7 +78,9 @@ class Strategy(ABC):
         self._asset_df["return"] = 0.0
         for wcol, ccol in zip(weight_cols, close_cols):
             self._asset_df[wcol] = self._compute_df[wcol].shift(1).fillna(0.0)
-            self._asset_df[ccol] = self._compute_df[ccol].pct_change().fillna(0.0)
+            self._asset_df[ccol] = (
+                self._compute_df[ccol].ffill().pct_change().fillna(0.0)
+            )
             self._asset_df["return"] += self._asset_df[wcol] * self._asset_df[ccol]
         self._asset_df["asset_value"] = (1.0 + self._asset_df["return"]).cumprod()
         self._asset_df["ln_asset_value"] = np.log(self._asset_df["asset_value"])
@@ -89,9 +99,16 @@ class Strategy(ABC):
             - 1
         ).min()
         print(f"Max Drawdown: {mdd * 100:.2f}%")
-        # alpha, beta, gamma = calculate_alpha_beta_gamma(self._asset_df['ln_asset_value'], self._asset_df['ln_reference_index'])
-        alpha, beta, gamma = None, None, None
-        print(f"alpha: {alpha}, beta: {beta}, gamma: {gamma}")
+
+        alpha, beta, gamma = calculate_alpha_beta_gamma(
+            self._asset_df["asset_value"], np.exp(self._asset_df["ln_reference_index"])
+        )
+        if self.interval == "1h":
+            annual_alpha = (1 + alpha) ** (24 * 365) - 1
+
+        print(
+            f"annual alpha: {annual_alpha * 100:.2f}%, beta: {beta:.2f}, gamma: {gamma:.2f}"
+        )
         reference_return = np.exp(self._asset_df["ln_reference_index"].iloc[-1]) - 1
         print(f"Reference {self.reference_index} Return: {reference_return:.2f}%")
         print(

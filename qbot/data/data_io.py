@@ -95,9 +95,11 @@ class Symbol:
         self.raw_symbol = raw_symbol
 
     @staticmethod
-    def parse_str(ticker: str) -> Any:
+    def parse_str(ticker: str, interval: str = "1h") -> Any:
         if "_" in ticker:
-            exchange, interval, market, raw_symbol = ticker.split("_")
+            exchange, _interval, market, raw_symbol = ticker.split("_")
+            if _interval != interval:
+                raise ValueError(f"Interval {_interval} does not match {interval}")
             return Symbol(
                 exchange=exchange,
                 interval=interval,
@@ -113,7 +115,7 @@ class Symbol:
                 print(f"Adding USDT to ticker: {ticker}")
                 ticker += "USDT"
             return Symbol(
-                exchange="BINANCE", interval="1h", market="SPOT", raw_symbol=ticker
+                exchange="BINANCE", interval=interval, market="SPOT", raw_symbol=ticker
             )
 
     def __str__(self) -> str:
@@ -140,18 +142,18 @@ class Symbol:
     def _check_exchange_metadata(self) -> None:
         if self.exchange not in EXCHANGE_METADATA:
             raise ValueError(f"Exchange {self.exchange} not supported")
-        if self.interval not in EXCHANGE_METADATA[self.exchange]["INTERVAL_LIST"]:
-            raise ValueError(
-                f"Interval {self.interval} not supported for exchange {self.exchange}"
-            )
+        # if self.interval not in EXCHANGE_METADATA[self.exchange]["INTERVAL_LIST"]:
+        #     raise ValueError(
+        #         f"Interval {self.interval} not supported for exchange {self.exchange}"
+        #     )
         if self.market not in EXCHANGE_METADATA[self.exchange]["MARKET_LIST"]:
             raise ValueError(
                 f"Market {self.market} not supported for exchange {self.exchange}"
             )
-        if self.raw_symbol not in EXCHANGE_METADATA[self.exchange]["SYMBOL_LIST"]:
-            raise ValueError(
-                f"Symbol {self.raw_symbol} not supported for exchange {self.exchange}"
-            )
+        # if self.raw_symbol not in EXCHANGE_METADATA[self.exchange]["SYMBOL_LIST"]:
+        #     raise ValueError(
+        #         f"Symbol {self.raw_symbol} not supported for exchange {self.exchange}"
+        #     )
 
     def _fill_missing_timestamp(self, df: pd.DataFrame) -> pd.DataFrame:
         pd_timedelta = pd.Timedelta(self.interval)
@@ -244,17 +246,17 @@ class Symbol:
             client = Client()
 
         # Fetch new data based on market type
-        binance_client_get_hist_func = None
+        from binance.enums import HistoricalKlinesType
+
+        binance_client_get_hist_func = client.get_historical_klines
         if self.market == "SPOT":
-            binance_client_get_hist_func = client.get_historical_klines
+            klines_type = HistoricalKlinesType.SPOT
         elif self.market == "USDT-M":
-            binance_client_get_hist_func = client.futures_historical_klines
+            klines_type = HistoricalKlinesType.FUTURES
         elif self.market == "COIN-M":
-            binance_client_get_hist_func = client.futures_coin_historical_klines
+            klines_type = HistoricalKlinesType.FUTURES_COIN
         else:
             raise ValueError(f"Invalid market: {symbol.market}")
-
-        from binance.enums import HistoricalKlinesType
 
         start_ts, end_ts = time_range.to_milliseconds()
         klines = binance_client_get_hist_func(
@@ -262,12 +264,7 @@ class Symbol:
             interval=self.interval.lower(),
             start_str=start_ts,
             end_str=end_ts,
-            # limit=1000,
-            klines_type=(
-                HistoricalKlinesType.SPOT
-                if self.market == "SPOT"
-                else HistoricalKlinesType.FUTURES
-            ),
+            klines_type=klines_type,
         )
         # Convert new data to DataFrame
         df = pd.DataFrame(
