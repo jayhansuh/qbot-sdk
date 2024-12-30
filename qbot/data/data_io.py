@@ -256,8 +256,7 @@ class Symbol:
         elif self.market == "COIN-M":
             klines_type = HistoricalKlinesType.FUTURES_COIN
         else:
-            raise ValueError(f"Invalid market: {symbol.market}") 
-
+            raise ValueError(f"Invalid market: {symbol.market}")
 
         start_ts, end_ts = time_range.to_milliseconds()
         klines = binance_client_get_hist_func(
