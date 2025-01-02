@@ -117,6 +117,10 @@ def test_strategy_eval_perf():
     )
 
 
+@pytest.mark.skipif(
+    check_binance_availability(),
+    reason="Binance API not available or restricted",
+)
 def test_strategy_causality():
 
     strategy = Strategy(name="future_data")
