@@ -4,7 +4,8 @@ from typing import Callable, Dict, Optional, Union
 
 import numpy as np
 import pandas as pd
-
+from matplotlib import pyplot as plt
+from datetime import datetime
 from qbot.data.data_field import DataField
 from qbot.data.data_io import Symbol
 from qbot.strategy.utils import calculate_alpha_beta_gamma
@@ -23,8 +24,7 @@ class Strategy(ABC):
         self.hyper_params = hyper_params or {}
         self.interval = interval
         self._compute_df = pd.DataFrame()
-        self._asset_df = pd.DataFrame()
-        self.evaluate_func = None
+        self.weight_func = None
         self.reference_index = None
 
     def __setitem__(self, *args, **kwargs):
@@ -41,87 +41,211 @@ class Strategy(ABC):
     def iloc(self):
         return self._compute_df.iloc
 
-    def evaluate(self, data_field: DataField):
-        self.evaluate_func(self, data_field)
+    def get_weight_cols(self):
+        return [col for col in self._compute_df.columns if col.endswith("_weight")]
 
-    def save_evaluate_func(self):
-        with open("evaluate_func.pkl", "wb") as f:
-            pickle.dump(self.evaluate_func, f)
-
-    def load_evaluate_func(self):
-        with open("evaluate_func.pkl", "rb") as f:
-            self.evaluate_func = pickle.load(f)
-
-    def back_testing(self):
-
-        # check if reference_index is set
+    def eval_weight(self, data_field: DataField):
+        
+        # Make sure timestamp is set
+        if 'timestamp' not in self._compute_df.columns:
+            if data_field.timestamp is not None:
+                self._compute_df['timestamp'] = data_field.timestamp
+            else:
+                self._compute_df['timestamp'] = data_field['BTCUSDT']['timestamp']
+        
+        self.weight_func(self, data_field)
+        
+        # Make sure reference_index is set(default to BTCUSDT_close)
         if self.reference_index is None:
-            raise ValueError("reference_index is not set")
-        self._asset_df = pd.DataFrame(
-            self._compute_df["timestamp"], columns=["timestamp"]
-        )
-        self._asset_df["ln_reference_index"] = np.log(
-            self._compute_df[self.reference_index]
-        )
-        self._asset_df["ln_reference_index"] -= self._asset_df[
-            "ln_reference_index"
-        ].iloc[0]
+            # Any close column is set as reference_index
+            for col in self._compute_df.columns:
+                if col.endswith('_close'):
+                    self.reference_index = col
+                    break
+            if self.reference_index is None:
+                self.reference_index = 'BTCUSDT_close'
+                self._compute_df['BTCUSDT_close'] = data_field['BTCUSDT']['close']
+        else:
+            if self.reference_index not in self._compute_df.columns:
+                ticker, field = self.reference_index.split('_')
+                ticker, field = ticker.upper(), field.lower()
+                self._compute_df[self.reference_index] = data_field[ticker][field]
 
-        weight_cols = [
-            col for col in self._compute_df.columns if col.endswith("_weight")
-        ]
+        # Make sure all {ticker}_close are set when {ticker}_weight is set
+        weight_cols = self.get_weight_cols()
         close_cols = [col.replace("_weight", "_close") for col in weight_cols]
         for col in close_cols:
             if col not in self._compute_df.columns:
-                raise ValueError(f"Column {col} not found in _compute_df")
+                ticker, field = col.split('_')
+                ticker, field = ticker.upper(), field.lower()
+                self._compute_df[col] = data_field[ticker][field]
+        
+        # Check causality
+        for col in weight_cols:
+            last_val = self._compute_df[col].iloc[-1]
+            if last_val is None or pd.isna(last_val) or np.isnan(last_val):
+                raise ValueError(f"Column {col} violates causality")
+        
+    def save_weight_func(self):
+        with open("weight_func.pkl", "wb") as f:
+            pickle.dump(self.weight_func, f)
 
-        self._asset_df["return"] = 0.0
-        for wcol, ccol in zip(weight_cols, close_cols):
-            self._asset_df[wcol] = self._compute_df[wcol].shift(1).fillna(0.0)
-            self._asset_df[ccol] = (
-                self._compute_df[ccol].ffill().pct_change().fillna(0.0)
-            )
-            self._asset_df["return"] += self._asset_df[wcol] * self._asset_df[ccol]
-        self._asset_df["asset_value"] = (1.0 + self._asset_df["return"]).cumprod()
-        self._asset_df["ln_asset_value"] = np.log(self._asset_df["asset_value"])
+    def load_weight_func(self):
+        with open("weight_func.pkl", "rb") as f:
+            self.weight_func = pickle.load(f)
 
-        return self._asset_df
+    def eval_asset(self):
 
-    def display_result(self):
-        weight_cols = [col for col in self._asset_df.columns if col.endswith("_weight")]
-        self._asset_df[weight_cols + ["ln_reference_index", "ln_asset_value"]].plot()
+        weight_cols = self.get_weight_cols()
+        
+        self._compute_df["asset_return"] = 0.0
+        for wcol in weight_cols:
+            weight_series = self._compute_df[wcol].ffill().shift(1).fillna(0.0)
+            ccol = wcol.replace("_weight", "_close")
+            close_series = self._compute_df[ccol].ffill().pct_change().fillna(0.0)
+            self._compute_df["asset_return"] += weight_series * close_series
+        self._compute_df["asset_value"] = (1.0 + self._compute_df["asset_return"]).cumprod()
+        self._compute_df.drop(columns=["asset_return"], inplace=True)
+
+        return self._compute_df[["asset_value"] + weight_cols]
+
+    def eval_perf(self, EVAL_PERIOD=1):
+
+        perf_dict = {}
+        perf_str = ""
+ 
+        # YEAR_DIV_NUM
+        if self.interval == "1M":
+            YEAR_DIV_NUM = 12 / EVAL_PERIOD
+        else:
+            YEAR_DIV_NUM = pd.Timedelta(days=365) / pd.Timedelta(self.interval) / EVAL_PERIOD
+        perf_dict["duration"] = len(self._compute_df) / YEAR_DIV_NUM
 
         # Print strategy statistics
-        total_return = self._asset_df["asset_value"].iloc[-1] - 1
-        print(f"Total Return: {total_return * 100:.2f}%")
+        total_return = self._compute_df["asset_value"].iloc[-1] / self._compute_df["asset_value"].iloc[0] - 1
+        annual_return = (1. + total_return) ** (YEAR_DIV_NUM/len(self._compute_df)) - 1
+        perf_dict["total_return"] = total_return + 1
+        perf_dict["annual_return"] = annual_return + 1
+
+        reference_return = self._compute_df[self.reference_index].iloc[-1] / self._compute_df[self.reference_index].iloc[0] - 1
+        annual_reference_return = (1. + reference_return) ** (YEAR_DIV_NUM/len(self._compute_df)) - 1
+        perf_dict["reference_return"] = reference_return + 1
+        perf_dict["annual_reference_return"] = annual_reference_return + 1
+
         mdd = (
-            self._asset_df["asset_value"].div(self._asset_df["asset_value"].cummax())
+            self._compute_df["asset_value"].div(self._compute_df["asset_value"].cummax())
             - 1
         ).min()
-        print(f"Max Drawdown: {mdd * 100:.2f}%")
+        perf_dict["mdd"] = mdd
 
+        # Calculate alpha, beta, and gamma
         alpha, beta, gamma = calculate_alpha_beta_gamma(
-            self._asset_df["asset_value"], np.exp(self._asset_df["ln_reference_index"])
+            self._compute_df[self.reference_index],
+            self._compute_df["asset_value"], 
+            periods=EVAL_PERIOD
         )
-        if self.interval == "1h":
-            annual_alpha = (1 + alpha) ** (24 * 365) - 1
+        annual_alpha = (1. + alpha) ** YEAR_DIV_NUM - 1.
+        annual_gamma = gamma * np.sqrt(YEAR_DIV_NUM)
 
-        print(
-            f"annual alpha: {annual_alpha * 100:.2f}%, beta: {beta:.2f}, gamma: {gamma:.2f}"
-        )
-        reference_return = np.exp(self._asset_df["ln_reference_index"].iloc[-1]) - 1
-        print(f"Reference {self.reference_index} Return: {reference_return:.2f}%")
-        print(
-            f"Strategy Return * Beta: {(beta if beta else 1.) * reference_return:.2f}%"
-        )
-        print(
-            f"Sharpe Ratio: {self._asset_df['return'].mean() / self._asset_df['return'].std() * np.sqrt(365*24):.2f}"
-        )
-        adjusted_score = self._asset_df["ln_asset_value"].iloc[-1]
-        adjusted_score -= np.log(
-            1.0
-            + (beta if beta else 1.0) * (self._asset_df["ln_reference_index"].iloc[-1])
-        )
-        adjusted_score *= 1.0 + mdd
-        # adjusted_score = 1 - np.exp(-1.*adjusted_score)
-        print(f"Score: {adjusted_score:.2f}")
+        perf_dict["annual_alpha"] = annual_alpha + 1
+        perf_dict["beta"] = beta
+        perf_dict["annual_gamma"] = annual_gamma
+        
+        # Calculate Sharpe Ratio
+        asset_return = self._compute_df['asset_value'].apply(np.log).diff(periods=EVAL_PERIOD)
+        sharpe_ratio = asset_return.mean() / asset_return.std()
+        annual_sharpe_ratio = sharpe_ratio * np.sqrt(YEAR_DIV_NUM)
+        perf_dict["annual_sharpe_ratio"] = annual_sharpe_ratio
+
+        # Calculate Sortino Ratio
+        sortino_ratio = asset_return.mean() / asset_return[asset_return < 0].std()
+        annual_sortino_ratio = sortino_ratio * np.sqrt(YEAR_DIV_NUM)
+        perf_dict["annual_sortino_ratio"] = annual_sortino_ratio
+
+        # Reference Sortino Ratio
+        ref_return = self._compute_df[self.reference_index].apply(np.log).diff(periods=EVAL_PERIOD)
+        ref_sortino_ratio = ref_return.mean() / ref_return[ref_return < 0].std()
+        annual_ref_sortino_ratio = ref_sortino_ratio * np.sqrt(YEAR_DIV_NUM)
+        perf_dict["annual_ref_sortino_ratio"] = annual_ref_sortino_ratio
+
+        
+        perf_str += f"Total Return: {total_return * 100:.2f}%\t\tARR: {annual_return * 100:.2f}%\n"
+        perf_str += f"{self.reference_index.split('_',1)[0]} Return: {reference_return * 100:.2f}%\t\tARR: {annual_reference_return * 100:.2f}%\n"
+        perf_str += f"Annual Ref Return * Beta:\tARR: {(beta if beta else 1.) * annual_reference_return * 100:.2f}%\n"
+        perf_str += "-----------------------------------------\n"
+        perf_str += f"annual alpha: {annual_alpha * 100:.2f}%, beta: {beta:.2f}, annual gamma: {annual_gamma:.2f}\n"
+        perf_str += f"Duration: {perf_dict['duration']:.2f} years\t\tMax Drawdown: {mdd * 100:.2f}%\n"
+        perf_str += "-----------------------------------------\n"
+        perf_str += f"Annual Sharpe Ratio:     \t{annual_sharpe_ratio:.2f}\n"
+        perf_str += f"Annual Sortino Ratio:    \t{annual_sortino_ratio:.2f}\n"
+        perf_str += f"Annual Ref Sortino Ratio:\t{annual_ref_sortino_ratio:.2f}\n"
+        
+        return perf_dict, perf_str
+    
+    def plot_perf(self):
+
+        weight_cols = self.get_weight_cols()
+        cutoff_num = 0
+        while cutoff_num < len(self._compute_df):
+            # Check if all weights are set
+            if all(self._compute_df[col].iloc[cutoff_num] is not None for col in weight_cols):
+                break
+            cutoff_num += 1
+        timestamp_cutoff = self._compute_df['timestamp'].iloc[cutoff_num:]
+        
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 10))
+
+        ax1.set_title(self.name + " - " + datetime.now().strftime("%Y-%m-%d"))
+        for col in self._compute_df.columns:
+            if col == 'timestamp' or col == 'asset_value' or col.endswith('_weight') or col.endswith('_close'):
+                continue
+            # normalize column
+            cutoff_series = self._compute_df[col].iloc[cutoff_num:]
+            max_val = cutoff_series.max()
+            min_val = cutoff_series.min()
+            label = col + f" ({min_val:.2f}, {max_val:.2f})"
+            cutoff_series = (cutoff_series - min_val) / (max_val - min_val)
+            ax1.plot(timestamp_cutoff, cutoff_series, label=label, alpha=0.5)
+        ax1.legend()
+        ax1.set_yticks([0, 1], labels=['min', 'max'])
+        ax1.xaxis.set_major_locator(plt.MaxNLocator(7))
+        # Draw reference and asset value on left axis of ax2
+        ax2.set_yscale('log')
+        
+        # Plot asset value with thick solid line
+        cutoff_series = self._compute_df['asset_value'].iloc[cutoff_num:]
+        max_val = cutoff_series.max()
+        min_val = cutoff_series.min()
+        label = 'asset_value' + f" ({min_val:.2f}, {max_val:.2f})"
+        ax2.plot(timestamp_cutoff, cutoff_series/cutoff_series.iloc[0], label=label, 
+                linewidth=2, color='lightcoral')
+
+        # Plot reference index with dashed line
+        cutoff_series = self._compute_df[self.reference_index].iloc[cutoff_num:]
+        max_val = cutoff_series.max()
+        min_val = cutoff_series.min()
+        label = self.reference_index + f" ({min_val:.2f}, {max_val:.2f})"
+        ax2.plot(timestamp_cutoff, cutoff_series/cutoff_series.iloc[0], label=label,
+                linestyle='-', linewidth=2, color='teal', alpha=0.8)
+
+        # Plot other price series with thin transparent lines
+        for col in weight_cols:
+            col = col.replace('_weight', '_close')
+            if col == self.reference_index:
+                continue
+            ax2.plot(timestamp_cutoff, 
+                    self._compute_df[col].iloc[cutoff_num:]/self._compute_df[col].iloc[cutoff_num], 
+                    label=col, alpha=0.5, linewidth=1)
+        ax2.legend()
+        ax2.xaxis.set_major_locator(plt.MaxNLocator(7))
+
+        # Draw weights on right axis
+        ax3 = ax2.twinx()
+        for col in weight_cols:
+            cutoff_series = self._compute_df[col].iloc[cutoff_num:]
+            ax3.plot(timestamp_cutoff, cutoff_series, label=col, alpha=0.5)
+        ax3.hlines(y=0, xmin=timestamp_cutoff.min(), xmax=timestamp_cutoff.max(), color='slategrey', linestyle='--', alpha=0.5)
+        ax3.legend()
+        fig.tight_layout()
+
+        return fig, ax1, ax2
