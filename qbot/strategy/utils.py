@@ -99,7 +99,7 @@ def calculate_alpha_beta_gamma(
     """
     Calculate alpha, beta, and gamma for the given series x and y.
     dy/y = alpha + beta * dx/x + noise, where noise ~ N(0, gamma^2)
-    
+
     input:
         x: pd.Series, y: pd.Series, periods: int = 1
     output:
