@@ -94,20 +94,26 @@ def pairplot_scan(
 
 
 def calculate_alpha_beta_gamma(
-    y: pd.Series, x: pd.Series
+    x: pd.Series, y: pd.Series, periods: int = 1
 ) -> Tuple[float, float, float]:
-    # return_y =
-    #   alpha + beta * return_x
-    #   + gamma * return_x + noise
+    """
+    Calculate alpha, beta, and gamma for the given series x and y.
+    dy/y = alpha + beta * dx/x + noise, where noise ~ N(0, gamma^2)
+
+    input:
+        x: pd.Series, y: pd.Series, periods: int = 1
+    output:
+        alpha: float, beta: float, gamma: float
+    """
 
     # Calculate percentage changes and drop NaN values
-    return_y = y.pct_change().dropna()
-    return_x = x.pct_change().dropna()
+    return_x = x.pct_change(periods=periods).dropna()
+    return_y = y.pct_change(periods=periods).dropna()
 
     # Ensure alignment of the two series
-    data = pd.concat([return_y, return_x], axis=1).dropna()
-    return_y_aligned = data.iloc[:, 0]
-    return_x_aligned = data.iloc[:, 1]
+    data = pd.concat([return_x, return_y], axis=1).dropna()
+    return_x_aligned = data.iloc[:, 0]
+    return_y_aligned = data.iloc[:, 1]
 
     # Calculate beta (slope) using covariance and variance
     beta = return_y_aligned.cov(return_x_aligned) / return_x_aligned.var()

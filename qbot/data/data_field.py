@@ -22,6 +22,7 @@ class DataField:
         self.interval = interval
         self.end_time = end_time
         self.start_time = start_time or (end_time - timedelta(hours=300))
+        self.timestamp = None
         self.last_updated = None
         self.min_update_interval = min_update_interval
         self.df_dict = {}
@@ -37,6 +38,14 @@ class DataField:
                 client=self.binance_client,
             )
             self.symbol_list.append(new_symbol)
+            if self.timestamp is None:
+                self.timestamp = self.df_dict[str(new_symbol)]["timestamp"].copy()
+            else:
+                # Check if the new timestamp is the same as the old timestamp
+                if not self.timestamp.equals(
+                    self.df_dict[str(new_symbol)]["timestamp"]
+                ):
+                    print("Warning: Timestamp mismatch in a data field")
         elif isinstance(ticker, list):
             for t in ticker:
                 self.add_ticker(t)
