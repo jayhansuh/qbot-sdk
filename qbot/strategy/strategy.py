@@ -310,4 +310,4 @@ class Strategy(ABC):
         ax3.legend()
         fig.tight_layout()
 
-        return fig, ax1, ax2
+        return fig, ax1, ax2, ax3
