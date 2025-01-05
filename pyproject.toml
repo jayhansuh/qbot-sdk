@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qbot"
-version = "0.1.1"
+version = "0.1.2"
 description = "A cryptocurrency quantitative analysis and trading package"
 readme = "README.md"
 requires-python = ">=3.8"

@@ -1,6 +1,7 @@
 import fnmatch
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
-from typing import List, Tuple, Union
+from typing import Any, List, Tuple, Union
 
 import pandas as pd
 from binance.client import Client
@@ -29,26 +30,44 @@ class DataField:
         self.symbol_list = []
         self.add_ticker(ticker_list)
 
-    def add_ticker(self, ticker: Union[str, List[str]]) -> None:
+    def _symbol_init(self, ticker: str) -> Symbol:
+        symbol = Symbol(ticker)
+        symbol.interval = self.interval
+        return symbol
+
+    def _set_symbol_data(self, symbol: Symbol) -> None:
+        symbol_str = str(symbol)
+        self.df_dict[symbol_str] = symbol.load_data(
+            start_datetime=self.start_time,
+            end_datetime=self.end_time,
+            client=self.binance_client,
+        )
+
+        new_timestamp = self.df_dict[symbol_str]["timestamp"]
+        if self.timestamp is not None:
+            # Check if the new timestamp is the same as the old timestamp
+            if not self.timestamp.equals(new_timestamp):
+                print("Warning: Timestamp mismatch in a data field")
+        self.timestamp = new_timestamp
+
+    def update(self, symbol_list: List[Any], max_workers: int = 10) -> None:
+        if len(symbol_list) == 0:
+            return
+        if max_workers > len(symbol_list):
+            # print(f"Warning: max_workers is greater than the number of symbols to update. Setting max_workers to {len(symbol_list)}")
+            max_workers = len(symbol_list)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            executor.map(self._set_symbol_data, symbol_list)
+
+    def add_ticker(self, ticker: Union[str, List[str]], max_workers: int = 10) -> None:
         if isinstance(ticker, str):
-            new_symbol = Symbol.parse_str(ticker, interval=self.interval)
-            self.df_dict[str(new_symbol)] = new_symbol.load_data(
-                start_datetime=self.start_time,
-                end_datetime=self.end_time,
-                client=self.binance_client,
-            )
+            new_symbol = self._symbol_init(ticker)
             self.symbol_list.append(new_symbol)
-            if self.timestamp is None:
-                self.timestamp = self.df_dict[str(new_symbol)]["timestamp"].copy()
-            else:
-                # Check if the new timestamp is the same as the old timestamp
-                if not self.timestamp.equals(
-                    self.df_dict[str(new_symbol)]["timestamp"]
-                ):
-                    print("Warning: Timestamp mismatch in a data field")
+            self._set_symbol_data(new_symbol)
         elif isinstance(ticker, list):
-            for t in ticker:
-                self.add_ticker(t)
+            new_symbol_list = [self._symbol_init(t) for t in ticker]
+            self.symbol_list.extend(new_symbol_list)
+            self.update(new_symbol_list, max_workers=max_workers)
         else:
             raise ValueError(f"Invalid ticker: {ticker}")
 
@@ -61,7 +80,7 @@ class DataField:
             if key in self.df_dict:
                 return self.df_dict[key]
 
-            key = str(Symbol.parse_str(key, interval=self.interval))
+            key = str(self._symbol_init(key))
             if "*" in key or "?" in key or "[" in key or "{" in key:
                 fnmatch_list = [
                     k for k in self.df_dict.keys() if fnmatch.fnmatch(k, key)
@@ -74,14 +93,14 @@ class DataField:
             # return (key, self.df_dict[key])
             return self.df_dict[key]
 
-        elif isinstance(key, Symbol):
-            return self.__getitem__(str(key))
         elif isinstance(key, list) or isinstance(key, tuple):
             # return [(k, self.df_dict[k]) for k in key]
             return [self.df_dict[k] for k in key]
         elif isinstance(key, int):
             # return (self.symbol_list[key], self.df_dict[self.symbol_list[key]])
             return self.df_dict[self.symbol_list[key]]
+        elif isinstance(key, object):
+            return self.__getitem__(str(key))
         else:
             raise ValueError(f"Invalid key: {key}")
 
