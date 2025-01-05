@@ -6,6 +6,7 @@ from typing import Any, Optional, Tuple, Union
 
 import pandas as pd  # type: ignore
 
+SEP = "__"
 EXCHANGE_METADATA = {
     # TODO:
     # Add more exchanges
@@ -82,47 +83,42 @@ class TimeRange:
 
 
 class Symbol:
-    def __init__(
-        self,
-        exchange: str = "BINANCE",
-        interval: str = "1h",
-        market: str = "SPOT",
-        raw_symbol: str = "BTCUSDT",
-    ):
-        self.exchange = exchange
-        self.interval = interval
-        self.market = market
-        self.raw_symbol = raw_symbol
+    def __init__(self, ticker: str):
 
-    @staticmethod
-    def parse_str(ticker: str, interval: str = "1h") -> Any:
-        if "_" in ticker:
-            exchange, _interval, market, raw_symbol = ticker.split("_")
-            if _interval != interval:
-                raise ValueError(f"Interval {_interval} does not match {interval}")
-            return Symbol(
-                exchange=exchange,
-                interval=interval,
-                market=market,
-                raw_symbol=raw_symbol,
-            )
-        else:
-            if not (
-                ticker.endswith("USDT")
-                or ticker.endswith("USDC")
-                or ticker.endswith("KRW")
-            ):
-                print(f"Adding USDT to ticker: {ticker}")
-                ticker += "USDT"
-            return Symbol(
-                exchange="BINANCE", interval=interval, market="SPOT", raw_symbol=ticker
-            )
+        # Default values
+        self.exchange = "BINANCE"
+        self.interval = "1h"
+        self.market = "SPOT"
+        self.raw_symbol = "BTCUSDT"
+
+        ticker_split = ticker.split(SEP, maxsplit=5)
+
+        if len(ticker_split) > 4:
+            raise ValueError(f"Invalid ticker: {ticker}")
+
+        self.raw_symbol = ticker_split[-1].upper()
+        if not any(
+            self.raw_symbol.endswith(suffix)
+            for suffix in ["USDT", "USDC", "KRW", "USD", "_PERP"]
+        ):
+            self.raw_symbol += "USDT"
+
+        if len(ticker_split) == 1 and self.raw_symbol.endswith("_PERP"):
+            self.market = "COIN-M"
+
+        # Set values from ticker_split if available, otherwise keep defaults
+        if len(ticker_split) > 1:
+            self.market = ticker_split[-2].upper()
+        if len(ticker_split) > 2:
+            self.interval = ticker_split[
+                -3
+            ]  # no upper() to distinguish 1M(month) and 1m(minute)
+        if len(ticker_split) > 3:
+            self.exchange = ticker_split[-4].upper()
 
     def __str__(self) -> str:
         if not hasattr(self, "symbol_str"):
-            self.symbol_str = (
-                f"{self.exchange}_{self.interval}_{self.market}_{self.raw_symbol}"
-            )
+            self.symbol_str = f"{self.exchange}{SEP}{self.interval}{SEP}{self.market}{SEP}{self.raw_symbol}"
         return self.symbol_str
 
     def get_local_folder(self) -> str:
