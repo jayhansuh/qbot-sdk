@@ -1,21 +1,18 @@
 import pickle
-from abc import ABC, abstractmethod
+from abc import ABC
 from datetime import datetime
-from typing import Callable, Dict, Optional, Union
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
 from qbot.data.data_field import DataField
-from qbot.data.data_io import Symbol
 from qbot.strategy.utils import calculate_alpha_beta_gamma
 
 
 class Strategy(ABC):
-    def __init__(
-        self, name: str, hyper_params: Optional[Dict] = None, interval: str = "1h"
-    ):
+    def __init__(self, name: str, hyper_params: Optional[Dict] = None, interval: str = "1h"):
         """
         hyper_params: dictionary of hyperparameters
         required_fields: list of field names
@@ -46,7 +43,6 @@ class Strategy(ABC):
         return [col for col in self._compute_df.columns if col.endswith("_weight")]
 
     def eval_weight(self, data_field: DataField):
-
         # Clear all weight columns
         for col in self.get_weight_cols():
             self._compute_df.drop(columns=[col], inplace=True)
@@ -89,9 +85,7 @@ class Strategy(ABC):
         for col in weight_cols:
             last_val = self._compute_df[col].iloc[-1]
             if last_val is None or pd.isna(last_val) or np.isnan(last_val):
-                raise ValueError(
-                    f"Causality violation: column {col} depends on future data"
-                )
+                raise ValueError(f"Causality violation: column {col} depends on future data")
 
     def save_weight_func(self):
         with open("weight_func.pkl", "wb") as f:
@@ -102,7 +96,6 @@ class Strategy(ABC):
             self.weight_func = pickle.load(f)
 
     def eval_asset(self, commission_rate=0.00045):
-
         weight_cols = self.get_weight_cols()
 
         self._compute_df["asset_return"] = 0.0
@@ -117,15 +110,14 @@ class Strategy(ABC):
             self._compute_df["asset_return"] += weight_series_shift * close_series_pctchange
             self._compute_df["trading_volume"] += weight_series_diff_abs
 
-        asset_pctchange = (1.0 + self._compute_df["asset_return"])
-        asset_pctchange *= (1.0 - self._compute_df["trading_volume"] * commission_rate)
+        asset_pctchange = 1.0 + self._compute_df["asset_return"]
+        asset_pctchange *= 1.0 - self._compute_df["trading_volume"] * commission_rate
         self._compute_df["asset_value"] = asset_pctchange.cumprod()
         self._compute_df.drop(columns=["asset_return", "trading_volume"], inplace=True)
 
         return self._compute_df[["asset_value"] + weight_cols]
 
     def eval_perf(self, EVAL_PERIOD=1):
-
         perf_dict = {}
         perf_str = ""
 
@@ -133,40 +125,23 @@ class Strategy(ABC):
         if self.interval == "1M":
             YEAR_DIV_NUM = 12 / EVAL_PERIOD
         else:
-            YEAR_DIV_NUM = (
-                pd.Timedelta(days=365) / pd.Timedelta(self.interval) / EVAL_PERIOD
-            )
+            YEAR_DIV_NUM = pd.Timedelta(days=365) / pd.Timedelta(self.interval) / EVAL_PERIOD
         perf_dict["duration"] = len(self._compute_df) / YEAR_DIV_NUM
 
         # Print strategy statistics
-        total_return = (
-            self._compute_df["asset_value"].iloc[-1]
-            / self._compute_df["asset_value"].iloc[0]
-            - 1
-        )
-        annual_return = (1.0 + total_return) ** (
-            YEAR_DIV_NUM / len(self._compute_df)
-        ) - 1
+        total_return = self._compute_df["asset_value"].iloc[-1] / self._compute_df["asset_value"].iloc[0] - 1
+        annual_return = (1.0 + total_return) ** (YEAR_DIV_NUM / len(self._compute_df)) - 1
         perf_dict["total_return"] = total_return
         perf_dict["annual_return"] = annual_return
 
         reference_return = (
-            self._compute_df[self.reference_index].iloc[-1]
-            / self._compute_df[self.reference_index].iloc[0]
-            - 1
+            self._compute_df[self.reference_index].iloc[-1] / self._compute_df[self.reference_index].iloc[0] - 1
         )
-        annual_reference_return = (1.0 + reference_return) ** (
-            YEAR_DIV_NUM / len(self._compute_df)
-        ) - 1
+        annual_reference_return = (1.0 + reference_return) ** (YEAR_DIV_NUM / len(self._compute_df)) - 1
         perf_dict["reference_return"] = reference_return
         perf_dict["annual_reference_return"] = annual_reference_return
 
-        mdd = (
-            self._compute_df["asset_value"].div(
-                self._compute_df["asset_value"].cummax()
-            )
-            - 1
-        ).min()
+        mdd = (self._compute_df["asset_value"].div(self._compute_df["asset_value"].cummax()) - 1).min()
         perf_dict["mdd"] = mdd
 
         # Calculate alpha, beta, and gamma
@@ -183,9 +158,7 @@ class Strategy(ABC):
         perf_dict["annual_gamma"] = annual_gamma
 
         # Calculate Sharpe Ratio
-        asset_return = (
-            self._compute_df["asset_value"].apply(np.log).diff(periods=EVAL_PERIOD)
-        )
+        asset_return = self._compute_df["asset_value"].apply(np.log).diff(periods=EVAL_PERIOD)
         sharpe_ratio = asset_return.mean() / asset_return.std()
         annual_sharpe_ratio = sharpe_ratio * np.sqrt(YEAR_DIV_NUM)
         perf_dict["annual_sharpe_ratio"] = annual_sharpe_ratio
@@ -196,18 +169,14 @@ class Strategy(ABC):
         perf_dict["annual_sortino_ratio"] = annual_sortino_ratio
 
         # Reference Sortino Ratio
-        ref_return = (
-            self._compute_df[self.reference_index]
-            .apply(np.log)
-            .diff(periods=EVAL_PERIOD)
-        )
+        ref_return = self._compute_df[self.reference_index].apply(np.log).diff(periods=EVAL_PERIOD)
         ref_sortino_ratio = ref_return.mean() / ref_return[ref_return < 0].std()
         annual_ref_sortino_ratio = ref_sortino_ratio * np.sqrt(YEAR_DIV_NUM)
         perf_dict["annual_ref_sortino_ratio"] = annual_ref_sortino_ratio
 
         perf_str += f"Total Return: {total_return * 100:.2f}%\t\tARR: {annual_return * 100:.2f}%\n"
-        perf_str += f"{self.reference_index.split('_',1)[0]} Return: {reference_return * 100:.2f}%\t\tARR: {annual_reference_return * 100:.2f}%\n"
-        perf_str += f"Annual Ref Return * Beta:\tARR: {(beta if beta else 1.) * annual_reference_return * 100:.2f}%\n"
+        perf_str += f"{self.reference_index.split('_', 1)[0]} Return: {reference_return * 100:.2f}%\t\tARR: {annual_reference_return * 100:.2f}%\n"
+        perf_str += f"Annual Ref Return * Beta:\tARR: {(beta if beta else 1.0) * annual_reference_return * 100:.2f}%\n"
         perf_str += "-----------------------------------------\n"
         perf_str += f"annual alpha: {annual_alpha * 100:.2f}%, beta: {beta:.2f}, annual gamma: {annual_gamma:.2f}\n"
         perf_str += f"Duration: {perf_dict['duration']:.2f} years\t\tMax Drawdown: {mdd * 100:.2f}%\n"
@@ -219,15 +188,11 @@ class Strategy(ABC):
         return perf_dict, perf_str
 
     def plot_perf(self):
-
         weight_cols = self.get_weight_cols()
         cutoff_num = 0
         while cutoff_num < len(self._compute_df):
             # Check if all weights are set
-            if all(
-                self._compute_df[col].iloc[cutoff_num] is not None
-                for col in weight_cols
-            ):
+            if all(self._compute_df[col].iloc[cutoff_num] is not None for col in weight_cols):
                 break
             cutoff_num += 1
         timestamp_cutoff = self._compute_df["timestamp"].iloc[cutoff_num:]
@@ -236,12 +201,7 @@ class Strategy(ABC):
 
         ax1.set_title(self.name + " - " + datetime.now().strftime("%Y-%m-%d"))
         for col in self._compute_df.columns:
-            if (
-                col == "timestamp"
-                or col == "asset_value"
-                or col.endswith("_weight")
-                or col.endswith("_close")
-            ):
+            if col == "timestamp" or col == "asset_value" or col.endswith("_weight") or col.endswith("_close"):
                 continue
             # normalize column
             cutoff_series = self._compute_df[col].iloc[cutoff_num:]
@@ -291,8 +251,7 @@ class Strategy(ABC):
                 continue
             ax2.plot(
                 timestamp_cutoff,
-                self._compute_df[col].iloc[cutoff_num:]
-                / self._compute_df[col].iloc[cutoff_num],
+                self._compute_df[col].iloc[cutoff_num:] / self._compute_df[col].iloc[cutoff_num],
                 label=col,
                 alpha=0.5,
                 linewidth=1,
