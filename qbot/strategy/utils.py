@@ -13,22 +13,12 @@ def correlation(
     # Calculate correlations for different time shifts
     # Create shifted versions of target prices for all shifts at once
     target_shifts = pd.DataFrame(
-        {
-            s: target_series.shift(s)[s:-s] if s > 0 else target_series[abs(s) :]
-            for s in shifts
-        }
+        {s: target_series.shift(s)[s:-s] if s > 0 else target_series[abs(s) :] for s in shifts}
     )
 
     # Create aligned source prices for all shifts
     source_aligned = pd.DataFrame(
-        {
-            s: (
-                source_series[s:]
-                if s >= 0
-                else source_series.shift(abs(s))[abs(s) : -abs(s)]
-            )
-            for s in shifts
-        }
+        {s: (source_series[s:] if s >= 0 else source_series.shift(abs(s))[abs(s) : -abs(s)]) for s in shifts}
     )
 
     # Calculate correlations
@@ -93,9 +83,7 @@ def pairplot_scan(
     return new_df
 
 
-def calculate_alpha_beta_gamma(
-    x: pd.Series, y: pd.Series, periods: int = 1
-) -> Tuple[float, float, float]:
+def calculate_alpha_beta_gamma(x: pd.Series, y: pd.Series, periods: int = 1) -> Tuple[float, float, float]:
     """
     Calculate alpha, beta, and gamma for the given series x and y.
     dy/y = alpha + beta * dx/x + noise, where noise ~ N(0, gamma^2)

@@ -9,9 +9,7 @@ from .conftest import check_binance_availability
 
 
 def test_strategy_initialization():
-    strategy = Strategy(
-        name="test_strategy", hyper_params={"param1": 1.0}, interval="1h"
-    )
+    strategy = Strategy(name="test_strategy", hyper_params={"param1": 1.0}, interval="1h")
     assert strategy.name == "test_strategy"
     assert strategy.hyper_params == {"param1": 1.0}
     assert strategy.interval == "1h"
@@ -111,10 +109,7 @@ def test_strategy_eval_perf():
     assert abs(perf_dict["annual_alpha"] - 0.0) < 1e-6
     assert abs(perf_dict["beta"] - 1.0) < 1e-6
     assert abs(perf_dict["annual_gamma"] - 0.0) < 1e-6
-    assert (
-        abs(perf_dict["annual_sortino_ratio"] - perf_dict["annual_ref_sortino_ratio"])
-        < 1e-6
-    )
+    assert abs(perf_dict["annual_sortino_ratio"] - perf_dict["annual_ref_sortino_ratio"]) < 1e-6
 
 
 @pytest.mark.skipif(
@@ -127,9 +122,7 @@ def test_strategy_causality():
 
     def weight_func(strategy, data_field):
         strategy.reference_index = "BTCUSDT_close"
-        strategy["BTCUSDT_weight"] = -100 * data_field["BTCUSDT"]["close"].pct_change(
-            -1
-        )
+        strategy["BTCUSDT_weight"] = -100 * data_field["BTCUSDT"]["close"].pct_change(-1)
 
     strategy.weight_func = weight_func
 

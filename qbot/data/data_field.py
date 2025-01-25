@@ -82,9 +82,7 @@ class DataField:
 
             key = str(self._symbol_init(key))
             if "*" in key or "?" in key or "[" in key or "{" in key:
-                fnmatch_list = [
-                    k for k in self.df_dict.keys() if fnmatch.fnmatch(k, key)
-                ]
+                fnmatch_list = [k for k in self.df_dict.keys() if fnmatch.fnmatch(k, key)]
                 # return [(k, self.df_dict[k]) for k in fnmatch_list]
                 return [self.df_dict[k] for k in fnmatch_list]
 

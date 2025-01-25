@@ -97,10 +97,7 @@ class Symbol:
             raise ValueError(f"Invalid ticker: {ticker}")
 
         self.raw_symbol = ticker_split[-1].upper()
-        if not any(
-            self.raw_symbol.endswith(suffix)
-            for suffix in ["USDT", "USDC", "KRW", "USD", "_PERP"]
-        ):
+        if not any(self.raw_symbol.endswith(suffix) for suffix in ["USDT", "USDC", "KRW", "USD", "_PERP"]):
             self.raw_symbol += "USDT"
 
         if len(ticker_split) == 1 and self.raw_symbol.endswith("_PERP"):
@@ -110,9 +107,7 @@ class Symbol:
         if len(ticker_split) > 1:
             self.market = ticker_split[-2].upper()
         if len(ticker_split) > 2:
-            self.interval = ticker_split[
-                -3
-            ]  # no upper() to distinguish 1M(month) and 1m(minute)
+            self.interval = ticker_split[-3]  # no upper() to distinguish 1M(month) and 1m(minute)
         if len(ticker_split) > 3:
             self.exchange = ticker_split[-4].upper()
 
@@ -124,16 +119,12 @@ class Symbol:
     def get_local_folder(self) -> str:
         """Get the local folder for the symbol"""
         if not hasattr(self, "local_folder"):
-            base_dir = os.environ.get(
-                "QBOT_DATA_DIR", os.path.dirname(os.path.abspath(__file__))
-            )
+            base_dir = os.environ.get("QBOT_DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
             self.local_folder = os.path.join(base_dir, str(self))
         return self.local_folder
 
     def set(self, symbol_str: str) -> None:
-        self.exchange, self.interval, self.market, self.raw_symbol = symbol_str.split(
-            "_"
-        )
+        self.exchange, self.interval, self.market, self.raw_symbol = symbol_str.split("_")
 
     def _check_exchange_metadata(self) -> None:
         if self.exchange not in EXCHANGE_METADATA:
@@ -143,9 +134,7 @@ class Symbol:
         #         f"Interval {self.interval} not supported for exchange {self.exchange}"
         #     )
         if self.market not in EXCHANGE_METADATA[self.exchange]["MARKET_LIST"]:
-            raise ValueError(
-                f"Market {self.market} not supported for exchange {self.exchange}"
-            )
+            raise ValueError(f"Market {self.market} not supported for exchange {self.exchange}")
         # if self.raw_symbol not in EXCHANGE_METADATA[self.exchange]["SYMBOL_LIST"]:
         #     raise ValueError(
         #         f"Symbol {self.raw_symbol} not supported for exchange {self.exchange}"
@@ -169,28 +158,20 @@ class Symbol:
         df.sort_values(by="timestamp", inplace=True)
         df.reset_index(drop=True, inplace=True)
         if missing_timestamps:
-            print(
-                f"Warning: {len(missing_timestamps)} missing timestamps found and filled with NA"
-            )
+            print(f"Warning: {len(missing_timestamps)} missing timestamps found and filled with NA")
             print(missing_timestamps)
         return df
 
-    def _check_timestamp(
-        self, df: pd.DataFrame, time_range: Union[TimeRange, None] = None
-    ) -> None:
+    def _check_timestamp(self, df: pd.DataFrame, time_range: Union[TimeRange, None] = None) -> None:
 
         if "timestamp" not in df.columns:
             raise ValueError(f"Timestamp column not found in DataFrame")
         # timestamp should be in ascending order
         if not df["timestamp"].is_monotonic_increasing:
-            raise ValueError(
-                f"Timestamp is not in ascending order: {df['timestamp'].min()} - {df['timestamp'].max()}"
-            )
+            raise ValueError(f"Timestamp is not in ascending order: {df['timestamp'].min()} - {df['timestamp'].max()}")
         # timestamp should be unique
         if df["timestamp"].duplicated().any():
-            raise ValueError(
-                f"Timestamp is not unique: {df['timestamp'][df['timestamp'].duplicated()]}"
-            )
+            raise ValueError(f"Timestamp is not unique: {df['timestamp'][df['timestamp'].duplicated()]}")
 
         # Check if the timestamp is in the correct time range
         if time_range:
@@ -218,9 +199,7 @@ class Symbol:
                 for i in range(1, len(df)):
                     if df["timestamp"].diff()[i] != pd_timedelta:
                         print(df.iloc[max(0, i - 10) : min(len(df), i + 10)])
-                raise ValueError(
-                    f"Timestamp delta is not {pd_timedelta}: {diff_series.value_counts()}"
-                )
+                raise ValueError(f"Timestamp delta is not {pd_timedelta}: {diff_series.value_counts()}")
 
     def fetch_data(
         self,
@@ -301,9 +280,7 @@ class Symbol:
 
         # Convert to int, keeping NA values
         int_cols = ["close_time", "number_of_trades", "ignore"]
-        df[int_cols] = (
-            df[int_cols].apply(pd.to_numeric, errors="coerce").astype("Int64")
-        )
+        df[int_cols] = df[int_cols].apply(pd.to_numeric, errors="coerce").astype("Int64")
 
         return df
 
@@ -341,18 +318,14 @@ class Symbol:
             df = pd.read_parquet(filename)
         else:
             print(f"Fetching data from {start_datetime} to {end_datetime}")
-            df = self.fetch_data(
-                start_datetime=start_datetime, end_datetime=end_datetime, client=client
-            )
+            df = self.fetch_data(start_datetime=start_datetime, end_datetime=end_datetime, client=client)
             print(f"Saving data to {filename}")
             self.save_data(df, start_datetime=start_datetime, end_datetime=end_datetime)
         return df
 
 
 if __name__ == "__main__":
-    symbol = Symbol(
-        exchange="BINANCE", interval="1h", market="SPOT", raw_symbol="BTCUSDT"
-    )
+    symbol = Symbol(exchange="BINANCE", interval="1h", market="SPOT", raw_symbol="BTCUSDT")
     print(symbol)
     if "BINANCE_1h_SPOT_BTCUSDT" != str(symbol):
         raise ValueError(f"Symbol string mismatch: {str(symbol)}")
