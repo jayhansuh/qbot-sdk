@@ -1,7 +1,6 @@
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from glob import glob
 from typing import Any, Optional, Tuple, Union
 
 import pandas as pd  # type: ignore
@@ -165,7 +164,7 @@ class Symbol:
     def _check_timestamp(self, df: pd.DataFrame, time_range: Union[TimeRange, None] = None) -> None:
 
         if "timestamp" not in df.columns:
-            raise ValueError(f"Timestamp column not found in DataFrame")
+            raise ValueError("Timestamp column not found in DataFrame")
         # timestamp should be in ascending order
         if not df["timestamp"].is_monotonic_increasing:
             raise ValueError(f"Timestamp is not in ascending order: {df['timestamp'].min()} - {df['timestamp'].max()}")
@@ -190,7 +189,7 @@ class Symbol:
             # next_month_series = df['timestamp'].apply(lambda x: x + pd.Timedelta(days=x.days_in_month)).shift(1)
             # if not (next_month_series[1:] == df['timestamp'][:-1]).all():
             #     raise ValueError(f"Timestamp is not next month: {df['timestamp'].min()} - {df['timestamp'].max()}")
-            raise NotImplementedError(f"Checking timestamp for 1M is not implemented")
+            raise NotImplementedError("Checking timestamp for 1M is not implemented")
         else:
             pd_timedelta = pd.Timedelta(self.interval)
             diff_series = df["timestamp"].diff()[1:]

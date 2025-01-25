@@ -5,6 +5,6 @@ def check_binance_availability():
         client = Client()
         client.ping()
         return False  # Don't skip if successful
-    except Exception as e:
+    except Exception:
         # Skip if any error occurs with Binance client
         return True

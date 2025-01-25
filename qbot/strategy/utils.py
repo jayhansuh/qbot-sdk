@@ -57,7 +57,7 @@ def pairplot_scan(
     y_col: str,
     x_shifts: range = range(40, 300, 120),
     y_shifts: range = range(-30, -300, -90),
-    hue_func: Callable = lambda df: df[f"close_pct_change_40"] < -0.085,
+    hue_func: Callable = lambda df: df["close_pct_change_40"] < -0.085,
 ) -> pd.DataFrame:
     sns.set_theme(style="ticks")
     # new_df = pd.DataFrame(df.index, columns=['timestamp'])
