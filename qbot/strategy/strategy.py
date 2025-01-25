@@ -101,20 +101,26 @@ class Strategy(ABC):
         with open("weight_func.pkl", "rb") as f:
             self.weight_func = pickle.load(f)
 
-    def eval_asset(self):
+    def eval_asset(self, commission_rate=0.00045):
 
         weight_cols = self.get_weight_cols()
 
         self._compute_df["asset_return"] = 0.0
+        self._compute_df["trading_volume"] = 0.0
+
         for wcol in weight_cols:
-            weight_series = self._compute_df[wcol].ffill().shift(1).fillna(0.0)
+            weight_series_shift = self._compute_df[wcol].ffill()
+            weight_series_shift = weight_series_shift.shift(1).fillna(0.0)
+            weight_series_diff_abs = weight_series_shift.diff().fillna(0.0).abs()
             ccol = wcol.replace("_weight", "_close")
-            close_series = self._compute_df[ccol].ffill().pct_change().fillna(0.0)
-            self._compute_df["asset_return"] += weight_series * close_series
-        self._compute_df["asset_value"] = (
-            1.0 + self._compute_df["asset_return"]
-        ).cumprod()
-        self._compute_df.drop(columns=["asset_return"], inplace=True)
+            close_series_pctchange = self._compute_df[ccol].ffill().pct_change().fillna(0.0)
+            self._compute_df["asset_return"] += weight_series_shift * close_series_pctchange
+            self._compute_df["trading_volume"] += weight_series_diff_abs
+
+        asset_pctchange = (1.0 + self._compute_df["asset_return"])
+        asset_pctchange *= (1.0 - self._compute_df["trading_volume"] * commission_rate)
+        self._compute_df["asset_value"] = asset_pctchange.cumprod()
+        self._compute_df.drop(columns=["asset_return", "trading_volume"], inplace=True)
 
         return self._compute_df[["asset_value"] + weight_cols]
 
