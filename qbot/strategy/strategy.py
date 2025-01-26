@@ -98,22 +98,27 @@ class Strategy(ABC):
     def eval_asset(self, commission_rate=0.00045):
         weight_cols = self.get_weight_cols()
 
-        self._compute_df["asset_return"] = 0.0
+        self._compute_df["asset_gain_factor"] = 1.0  # gamma
         self._compute_df["trading_volume"] = 0.0
 
-        for wcol in weight_cols:
-            weight_series_shift = self._compute_df[wcol].ffill()
-            weight_series_shift = weight_series_shift.shift(1).fillna(0.0)
-            weight_series_diff_abs = weight_series_shift.diff().fillna(0.0).abs()
-            ccol = wcol.replace("_weight", "_close")
-            close_series_pctchange = self._compute_df[ccol].ffill().pct_change().fillna(0.0)
-            self._compute_df["asset_return"] += weight_series_shift * close_series_pctchange
-            self._compute_df["trading_volume"] += weight_series_diff_abs
+        w_shift = {}
+        close_pctchange = {}
 
-        asset_pctchange = 1.0 + self._compute_df["asset_return"]
+        for wcol in weight_cols:
+            w_shift[wcol] = self._compute_df[wcol].ffill().shift(1).fillna(0.0)
+            ccol = wcol.replace("_weight", "_close")
+            close_pctchange[wcol] = self._compute_df[ccol].ffill().pct_change().fillna(0.0)
+            self._compute_df["asset_gain_factor"] += w_shift[wcol] * close_pctchange[wcol]
+
+        for wcol in weight_cols:
+            trading_volume = self._compute_df[wcol].ffill()
+            trading_volume -= w_shift[wcol] * (close_pctchange[wcol] + 1.0) / self._compute_df["asset_gain_factor"]
+            self._compute_df["trading_volume"] += trading_volume.fillna(0.0).abs()
+
+        asset_pctchange = self._compute_df["asset_gain_factor"]
         asset_pctchange *= 1.0 - self._compute_df["trading_volume"] * commission_rate
         self._compute_df["asset_value"] = asset_pctchange.cumprod()
-        self._compute_df.drop(columns=["asset_return", "trading_volume"], inplace=True)
+        self._compute_df.drop(columns=["asset_gain_factor", "trading_volume"], inplace=True)
 
         return self._compute_df[["asset_value"] + weight_cols]
 
